@@ -1,25 +1,17 @@
-import logo from './logo.svg';
-import './App.css';
+import React from "react";
+import { Grommet } from "grommet";
+import { grommet } from "grommet";
+import WPMReader from "./apps/WPMReader/WPMReader";
+const App = () => {
+  const [darkMode, setDarkMode] = React.useState(false);
 
-function App() {
+  const toggleTheme = () => {
+    setDarkMode(!darkMode);
+  }
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <Grommet full theme={grommet} themeMode={darkMode ? "dark" : "light"}>
+      <WPMReader toggleTheme={toggleTheme}/>
+    </Grommet>
   );
-}
-
+};
 export default App;
