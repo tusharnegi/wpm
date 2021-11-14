@@ -1,13 +1,13 @@
 import './WPMReader.css';
 import React, { useEffect, useRef, useState } from "react";
 import { Play, Pause, History } from 'grommet-icons';
-import { Button, Box, Header, TextArea, RangeInput, Text, Meter, Footer } from 'grommet';
+import { Main, Button, Box, Header, TextArea, RangeInput, Text, Meter, Footer, CheckBoxGroup } from 'grommet';
 import ReactHtmlParser from 'react-html-parser';
 import useInterval from '../../shared/hooks/useInterval'
 import useEventListener from '@use-it/event-listener'
 import { sizes, dummyText } from './constants'
 
-const stickyProgress = { position: 'sticky', bottom: '0px', opacity: '85%' };
+const stickyProgress = {  position: 'sticky', bottom: '0px', opacity: '85%' };
 
 function WPMReader({ toggleTheme }) {
   const [speed, setSpeed] = useState(200);
@@ -53,7 +53,7 @@ function WPMReader({ toggleTheme }) {
       setI(i + chunk);
     }
     setFinalText(sentence)
-  }, 60000 / speed);
+  }, 60000 / speed * chunk);
 
 
   const handleShortcuts = (e) => {
@@ -108,6 +108,7 @@ function WPMReader({ toggleTheme }) {
 
   return (
     <>
+     <Main>
       <Header background="dark-1" pad="small">
           <Text size="large"> WPM Reader </Text>
           <Button
@@ -174,6 +175,7 @@ function WPMReader({ toggleTheme }) {
             alignSelf="center"
             onClick={() => {
               setI(0);
+              setFinalText(textInput)
             }}
           />
         </Box>
@@ -189,6 +191,7 @@ function WPMReader({ toggleTheme }) {
           </>
         }
       </Box>
+      </Main>
       <Footer style={stickyProgress} background="light-4" justify="center" pad="small">
         <Text size="xsmall" >{wordLength.current === 0 ? 0 : Math.min(100, parseInt(i * 100 / wordLength.current))} %</Text>
         <Meter size="large" type="bar" value={Math.min(100, (i / wordLength.current) * 100)} />
