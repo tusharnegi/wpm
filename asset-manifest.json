@@ -1,0 +1,22 @@
+{
+  "files": {
+    "main.css": "/wpm/static/css/main.587edc40.chunk.css",
+    "main.js": "/wpm/static/js/main.8ccceb4b.chunk.js",
+    "main.js.map": "/wpm/static/js/main.8ccceb4b.chunk.js.map",
+    "runtime-main.js": "/wpm/static/js/runtime-main.dc22cfc4.js",
+    "runtime-main.js.map": "/wpm/static/js/runtime-main.dc22cfc4.js.map",
+    "static/js/2.679e2fe8.chunk.js": "/wpm/static/js/2.679e2fe8.chunk.js",
+    "static/js/2.679e2fe8.chunk.js.map": "/wpm/static/js/2.679e2fe8.chunk.js.map",
+    "static/js/3.92b7e4d6.chunk.js": "/wpm/static/js/3.92b7e4d6.chunk.js",
+    "static/js/3.92b7e4d6.chunk.js.map": "/wpm/static/js/3.92b7e4d6.chunk.js.map",
+    "index.html": "/wpm/index.html",
+    "static/css/main.587edc40.chunk.css.map": "/wpm/static/css/main.587edc40.chunk.css.map",
+    "static/js/2.679e2fe8.chunk.js.LICENSE.txt": "/wpm/static/js/2.679e2fe8.chunk.js.LICENSE.txt"
+  },
+  "entrypoints": [
+    "static/js/runtime-main.dc22cfc4.js",
+    "static/js/2.679e2fe8.chunk.js",
+    "static/css/main.587edc40.chunk.css",
+    "static/js/main.8ccceb4b.chunk.js"
+  ]
+}
