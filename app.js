@@ -5,6 +5,15 @@
   const DOC = 'wpm.doc';      // { text, title, chapters } (large; written only when the text changes)
   const SIZES = [14, 16, 18, 20, 22, 25, 28, 32, 36, 42, 48];
   const THEMES = ['auto', 'light', 'dark'];
+  const FONTS = ['serif', 'sans', 'mono'];
+  const COLORS = [   // highlight colours: oklch hue, and a hex for the tab icon
+    { name: 'Amber', hue: 55, hex: '#f59a4a' },
+    { name: 'Yellow', hue: 95, hex: '#e6c445' },
+    { name: 'Green', hue: 150, hex: '#4ade80' },
+    { name: 'Blue', hue: 245, hex: '#60a5fa' },
+    { name: 'Violet', hue: 300, hex: '#b48cf2' },
+    { name: 'Pink', hue: 355, hex: '#f472b6' },
+  ];
   const SECTION = 4000;       // guide mode shows one chapter, or about this many words, at a time
   const SAMPLE = `Welcome to WPM Reader. Paste anything you want to read, pick a speed, and press play. The highlight moves through the text at exactly that pace, so your eyes have somewhere to be and stop drifting back over lines you have already read.
 
@@ -14,7 +23,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   const $ = (id) => document.getElementById(id);
 
   // ---------- state ----------
-  // state: { pos, wpm, chunk, size, mode, pauses, theme } — pos is the index of the first highlighted word.
+  // state: { pos, wpm, chunk, size, mode, pauses, theme, font, hue } — pos is the index of the first highlighted word.
   let state = load();
   let doc = loadDoc();
   let words = [];        // [{ w, p }] — the word and the index of its paragraph
@@ -32,7 +41,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   let iconKey = '';
 
   function load() {
-    const d = { pos: 0, wpm: 250, chunk: 1, size: 4, mode: 'guide', pauses: false, theme: 'auto' };
+    const d = { pos: 0, wpm: 250, chunk: 1, size: 4, mode: 'guide', pauses: false, theme: 'auto', font: 'serif', hue: 150 };
     try { return { ...d, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return d; }
   }
   function loadDoc() {
@@ -315,6 +324,15 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
       for (const el of document.querySelectorAll('[data-mode]')) el.setAttribute('aria-checked', el.dataset.mode === m);
     });
     text($('theme'), state.theme[0].toUpperCase() + state.theme.slice(1));
+    put(document.documentElement, 'font', state.font, (f) => {
+      if (f === 'serif') delete document.documentElement.dataset.font; else document.documentElement.dataset.font = f;
+      for (const el of document.querySelectorAll('.look [data-font]')) el.setAttribute('aria-checked', el.dataset.font === f);
+    });
+    put(document.documentElement, 'hue', state.hue, (h) => {
+      document.documentElement.style.setProperty('--hue', h);
+      for (const el of $('swatches').children) el.setAttribute('aria-checked', Number(el.dataset.hue) === h);
+      iconKey = '';
+    });
 
     const editing = !$('editor').hidden;
     put($('text'), 'h', editing || state.mode !== 'guide', (v) => { $('text').hidden = v; });
@@ -447,7 +465,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     g.lineWidth = 7; g.lineCap = 'round';
     g.strokeStyle = '#2a2d36';
     g.beginPath(); g.arc(32, 32, 19, 0, Math.PI * 2); g.stroke();
-    g.strokeStyle = '#4ade80';
+    g.strokeStyle = (COLORS.find((c) => c.hue === state.hue) || COLORS[2]).hex;
     g.beginPath(); g.arc(32, 32, 19, -Math.PI / 2, -Math.PI / 2 + Math.max(0.05, pct / 100) * Math.PI * 2); g.stroke();
     $('favicon').href = c.toDataURL();
   }
@@ -560,6 +578,24 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     save(); paint();
   });
 
+  function setFont(f) {
+    state.font = FONTS.includes(f) ? f : 'serif';
+    shown = { a: win.a, b: win.b };
+    save();
+    document.fonts?.ready.then(() => paint(true));   // lines rewrap, so the chunk and the scroll may move
+    paint(true);
+  }
+  function setHue(h) { state.hue = h; save(); paint(); }
+  for (const el of document.querySelectorAll('.look [data-font]')) el.addEventListener('click', () => setFont(el.dataset.font));
+  for (const c of COLORS) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.setAttribute('role', 'radio');
+    b.dataset.hue = c.hue; b.title = b.ariaLabel = c.name;
+    b.style.setProperty('--h', c.hue);
+    b.addEventListener('click', () => setHue(c.hue));
+    $('swatches').append(b);
+  }
+
   $('text').addEventListener('click', (ev) => {
     const more = ev.target.closest('[data-seek]');
     if (more) { seek(Number(more.dataset.seek)); window.scrollTo({ top: $('text').offsetTop - 16 }); return; }
@@ -606,6 +642,8 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
       f: () => setMode(state.mode === 'guide' ? 'flash' : 'guide'),
       e: openEditor,
       o: () => $('file').click(),
+      t: () => setFont(FONTS[(FONTS.indexOf(state.font) + 1) % FONTS.length]),
+      c: () => { const i = COLORS.findIndex((c) => c.hue === state.hue); setHue(COLORS[(i + 1) % COLORS.length].hue); },
       ',': () => setSize(state.size - 1), '<': () => setSize(state.size - 1),
       '.': () => setSize(state.size + 1), '>': () => setSize(state.size + 1),
     }[k.length === 1 ? k.toLowerCase() : k];

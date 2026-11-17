@@ -10,6 +10,6 @@ https://tusharnegi.github.io/wpm/
 - Click any word or the progress bar to jump.
 - Text, position and settings are saved on the device. Installable, works offline, and accepts text shared to it (`?text=…`).
 
-Keys: `Space` play/pause · `←` `→` speed (±10, Shift ±1) · `↑` `↓` chunk · `[` `]` sentence back/forward · `R` restart · `F` mode · `E` edit · `O` open file · `,` `.` text size.
+Keys: `Space` play/pause · `←` `→` speed (±10, Shift ±1) · `↑` `↓` chunk · `[` `]` sentence back/forward · `R` restart · `F` mode · `E` edit · `O` open file · `T` font (serif, sans, JetBrains Mono) · `C` highlight colour · `,` `.` text size.
 
 No build step: plain `index.html`, `style.css` and `app.js`. Run locally with `python3 -m http.server`.
