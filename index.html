@@ -13,7 +13,7 @@
   <link rel="icon" id="favicon" href="icon.svg">
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="stylesheet" href="style.css">
-  <script>try { const t = JSON.parse(localStorage.getItem('wpm.v1'))?.theme; if (t && t !== 'auto') document.documentElement.dataset.theme = t; } catch {}</script>
+  <script>try { const s = JSON.parse(localStorage.getItem('wpm.v1')) || {}, r = document.documentElement; if (s.theme && s.theme !== 'auto') r.dataset.theme = s.theme; if (s.font) r.dataset.font = s.font; if (s.hue != null) r.style.setProperty('--hue', s.hue); } catch {}</script>
 </head>
 <body>
   <main>
@@ -59,6 +59,14 @@
         </span>
         <input type="file" id="file" hidden accept=".txt,.text,.md,.markdown,.csv,.html,.htm,.epub,.pdf,text/*,application/epub+zip,application/pdf">
       </div>
+      <div class="look">
+        <span class="seg-ctl" role="radiogroup" aria-label="Font" title="Font (T)">
+          <button type="button" role="radio" data-font="serif">Serif</button>
+          <button type="button" role="radio" data-font="sans">Sans</button>
+          <button type="button" role="radio" data-font="mono">Mono</button>
+        </span>
+        <span id="swatches" class="swatches" role="radiogroup" aria-label="Highlight colour" title="Highlight colour (C)"></span>
+      </div>
       <div id="docbar" class="docbar" hidden>
         <span id="docTitle" class="doc-title"></span>
         <select id="toc" aria-label="Chapter"></select>
@@ -85,7 +93,7 @@
 
     <p class="hint">
       <kbd>Space</kbd> play <kbd>←</kbd><kbd>→</kbd> speed <kbd>↑</kbd><kbd>↓</kbd> chunk
-      <kbd>[</kbd><kbd>]</kbd> sentence <kbd>R</kbd> restart <kbd>F</kbd> mode <kbd>E</kbd> edit <kbd>O</kbd> open
+      <kbd>[</kbd><kbd>]</kbd> sentence <kbd>R</kbd> restart <kbd>F</kbd> mode <kbd>E</kbd> edit <kbd>O</kbd> open <kbd>T</kbd> font <kbd>C</kbd> colour
     </p>
   </main>
 
