@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>WPM Reader</title>
+  <meta name="description" content="Guided reading at the speed you choose.">
+  <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" id="favicon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+  <script>try { const t = JSON.parse(localStorage.getItem('wpm.v1'))?.theme; if (t && t !== 'auto') document.documentElement.dataset.theme = t; } catch {}</script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="bar">
+        <span class="label">WPM Reader</span>
+        <span class="tools">
+          <span class="seg-ctl" role="radiogroup" aria-label="Reading mode">
+            <button type="button" role="radio" data-mode="guide" title="Highlight words in the text (F)">Guide</button>
+            <button type="button" role="radio" data-mode="flash" title="One chunk at a time, centred (F)">Flash</button>
+          </span>
+          <button type="button" id="theme" class="pill" title="Theme">Auto</button>
+          <button type="button" id="install" class="pill" hidden>Install</button>
+        </span>
+      </div>
+
+      <div class="summary">
+        <div class="speed"><span id="wpm" class="big">250</span><span class="unit">wpm</span></div>
+        <div class="steppers">
+          <div class="stepper" title="Words per step (↑ ↓)">
+            <span class="k">Chunk</span>
+            <button type="button" data-step="chunk" data-d="-1" aria-label="Fewer words per step">−</button>
+            <output id="chunk">1</output>
+            <button type="button" data-step="chunk" data-d="1" aria-label="More words per step">+</button>
+          </div>
+          <div class="stepper" title="Text size (, .)">
+            <span class="k">Size</span>
+            <button type="button" data-step="size" data-d="-1" aria-label="Smaller text">−</button>
+            <output id="size">22</output>
+            <button type="button" data-step="size" data-d="1" aria-label="Larger text">+</button>
+          </div>
+        </div>
+      </div>
+      <input id="speed" type="range" min="50" max="1000" step="10" value="250" aria-label="Words per minute">
+      <div class="opts">
+        <label class="switch" title="Linger a little on commas, full stops and paragraph ends">
+          <input type="checkbox" id="pauses"> Pause at punctuation
+        </label>
+        <span id="meta" class="meta"></span>
+        <button type="button" id="edit" class="pill" title="Edit text (E)">Edit text</button>
+      </div>
+    </header>
+
+    <section id="reader" class="reader">
+      <div id="text" class="text" aria-live="off"></div>
+      <div id="stage" class="stage" hidden>
+        <div class="flash" aria-live="off"><span id="fl"></span><b id="fp"></b><span id="fr"></span></div>
+        <div id="ctx" class="ctx"></div>
+      </div>
+      <div id="editor" class="editor" hidden>
+        <textarea id="src" spellcheck="false" placeholder="Paste or type something to read. You can also drop a .txt file anywhere on the page."></textarea>
+        <div class="editor-bar">
+          <span id="srcMeta" class="meta"></span>
+          <span class="editor-actions">
+            <button type="button" id="clear" class="pill">Clear</button>
+            <button type="button" id="done" class="pill strong">Read <kbd>Esc</kbd></button>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <p class="hint">
+      <kbd>Space</kbd> play <kbd>←</kbd><kbd>→</kbd> speed <kbd>↑</kbd><kbd>↓</kbd> chunk
+      <kbd>[</kbd><kbd>]</kbd> sentence <kbd>R</kbd> restart <kbd>F</kbd> mode <kbd>E</kbd> edit
+    </p>
+  </main>
+
+  <footer class="transport">
+    <div id="track" class="track" title="Jump to a point"><div id="fill" class="fill"></div></div>
+    <div class="row">
+      <button type="button" id="restart" class="icon" title="Restart (R)" aria-label="Restart">
+        <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+      </button>
+      <button type="button" id="play" class="play" title="Play / pause (Space)" aria-label="Play">
+        <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>
+      </button>
+      <span id="stats" class="stats"></span>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" hidden><span id="toastText"></span></div>
+  <div id="drop" class="drop" hidden>Drop a text file to read it</div>
+  <script src="app.js"></script>
+</body>
+</html>
