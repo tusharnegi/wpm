@@ -96,6 +96,8 @@ button { cursor: pointer; }
 .text p:last-child { margin-bottom: 0; }
 .w { cursor: pointer; border-radius: 4px; transition: opacity 0.25s; }
 .w:hover { background: var(--line); }
+::highlight(read) { color: color-mix(in oklch, var(--fg) 42%, var(--panel)); }
+::highlight(chunk) { color: var(--fg); background-color: color-mix(in oklch, var(--c) 32%, transparent); }
 .w.read { opacity: 0.45; }
 .w.hl {
   opacity: 1;

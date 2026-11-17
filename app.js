@@ -59,6 +59,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     });
     if (!words.length) box.innerHTML = '<p class="meta">Nothing to read yet. Press <kbd>E</kbd> or “Edit text” to paste something.</p>';
     shown = { a: 0, b: 0 };
+    if (ranges) for (const k in ranges) ranges[k].collapse(true);   // they pointed into the old text
     state.pos = Math.min(state.pos, words.length);
   }
 
@@ -169,35 +170,62 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   }
 
   // ---------- painting ----------
+  // Write to the DOM only when a value actually changed, so a step costs a handful of writes.
+  const last = new Map();
+  function put(el, key, v, write) {
+    const id = el.id + key;
+    if (last.get(id) === v) return;
+    last.set(id, v);
+    write(v);
+  }
+  const text = (el, v) => put(el, 'text', v, () => { el.textContent = v; });
+
+  // Where supported, the chunk and the read part are two Ranges painted by the browser (CSS Highlight API):
+  // moving them changes no elements at all, and the chunk is one joined highlight across its spaces.
+  const ranges = 'highlights' in CSS ? { chunk: new Range(), read: new Range() } : null;
+  if (ranges) for (const k in ranges) CSS.highlights.set(k, new Highlight(ranges[k]));
+  function mark(range, from, to) {   // cover words [from, to)
+    if (to <= from) return range.collapse(true);
+    range.setStart(spans[from].firstChild, 0);
+    range.setEnd(spans[to - 1].firstChild, spans[to - 1].firstChild.length);
+  }
+
   function paint(follow) {
     const n = words.length;
     const a = Math.min(state.pos, n), b = Math.min(a + state.chunk, n);
-    document.body.classList.toggle('on', playing);
-    $('play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
-    document.documentElement.style.setProperty('--size', SIZES[state.size] + 'px');
+    put(document.body, 'on', playing, (v) => {
+      document.body.classList.toggle('on', v);
+      $('play').setAttribute('aria-label', v ? 'Pause' : 'Play');
+    });
+    put(document.documentElement, 'size', state.size, (v) => document.documentElement.style.setProperty('--size', SIZES[v] + 'px'));
 
-    $('wpm').textContent = state.wpm;
-    if (document.activeElement !== $('speed')) $('speed').value = state.wpm;
-    $('chunk').textContent = state.chunk;
-    $('size').textContent = SIZES[state.size];
-    $('pauses').checked = state.pauses;
-    for (const el of document.querySelectorAll('[data-mode]')) el.setAttribute('aria-checked', el.dataset.mode === state.mode);
-    $('theme').textContent = state.theme[0].toUpperCase() + state.theme.slice(1);
+    text($('wpm'), String(state.wpm));
+    if (document.activeElement !== $('speed')) put($('speed'), 'v', state.wpm, (v) => { $('speed').value = v; });
+    text($('chunk'), String(state.chunk));
+    text($('size'), String(SIZES[state.size]));
+    put($('pauses'), 'c', state.pauses, (v) => { $('pauses').checked = v; });
+    put($('theme'), 'mode', state.mode, (m) => {
+      for (const el of document.querySelectorAll('[data-mode]')) el.setAttribute('aria-checked', el.dataset.mode === m);
+    });
+    text($('theme'), state.theme[0].toUpperCase() + state.theme.slice(1));
 
     const editing = !$('editor').hidden;
-    $('text').hidden = editing || state.mode !== 'guide';
-    $('stage').hidden = editing || state.mode !== 'flash';
+    put($('text'), 'h', editing || state.mode !== 'guide', (v) => { $('text').hidden = v; });
+    put($('stage'), 'h', editing || state.mode !== 'flash', (v) => { $('stage').hidden = v; });
 
-    // highlight: touch only the words whose state changed
     if (state.mode === 'guide' && spans.length) {
-      const lo = Math.min(shown.a, a), hi = Math.max(shown.b, b, shown.a, a);
-      for (let i = lo; i < hi && i < spans.length; i++) {
-        spans[i].classList.toggle('hl', i >= a && i < b);
-        spans[i].classList.toggle('read', i < a);
+      if (ranges) {
+        mark(ranges.chunk, a, b);
+        mark(ranges.read, 0, a);
+      } else {   // older browsers: toggle classes on just the words whose state changed
+        const lo = Math.min(shown.a, a), hi = Math.max(shown.b, b, shown.a, a);
+        for (let i = lo; i < hi && i < spans.length; i++) {
+          spans[i].classList.toggle('hl', i >= a && i < b);
+          spans[i].classList.toggle('read', i < a);
+        }
+        if (a < shown.a) for (let i = a; i < shown.a; i++) spans[i].classList.remove('read');
+        shown = { a, b };
       }
-      // words read before the last paint that moved backwards
-      if (a < shown.a) for (let i = a; i < shown.a; i++) spans[i].classList.remove('read');
-      shown = { a, b };
       if (follow && b > a) keepInView(spans[a]);
     } else if (state.mode === 'flash') {
       paintFlash(a, b);
@@ -205,15 +233,15 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
 
     // progress
     const pct = n ? (a / n) * 100 : 0;
-    $('fill').style.width = pct + '%';
-    const left = n - a;
-    const mins = left / state.wpm;
-    $('stats').innerHTML = n
-      ? (a >= n ? '<b>Done</b> · ' + n.toLocaleString() + ' words' :
-        `<b>${Math.floor(pct)}%</b> · ${a.toLocaleString()} / ${n.toLocaleString()} · ${clock(mins * 60)} left`)
+    put($('fill'), 'w', pct, (v) => { $('fill').style.width = v + '%'; });
+    const stats = n
+      ? (a >= n ? `<b>Done</b> · ${n.toLocaleString()} words` :
+        `<b>${Math.floor(pct)}%</b> · ${a.toLocaleString()} / ${n.toLocaleString()} · ${clock(((n - a) / state.wpm) * 60)} left`)
       : 'No text';
-    $('meta').textContent = n ? `${n.toLocaleString()} words · ${clock((n / state.wpm) * 60)} at this speed` : '';
-    document.title = playing ? `${Math.floor(pct)}% · WPM Reader` : 'WPM Reader';
+    put($('stats'), 'html', stats, (v) => { $('stats').innerHTML = v; });
+    text($('meta'), n ? `${n.toLocaleString()} words · ${clock((n / state.wpm) * 60)} at this speed` : '');
+    const title = playing ? `${Math.floor(pct)}% · WPM Reader` : 'WPM Reader';
+    if (document.title !== title) document.title = title;
     paintIcon(playing, pct);
   }
 
