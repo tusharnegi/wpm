@@ -84,6 +84,26 @@ button { cursor: pointer; }
 .switch input { accent-color: var(--c); margin: 0; }
 .meta { color: var(--mute); font-size: 13px; }
 .opts .meta { flex: 1; text-align: right; }
+.opts-actions { display: flex; gap: 6px; }
+
+.docbar { display: flex; align-items: center; gap: 10px; margin-top: 14px; min-width: 0; }
+.doc-title { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+.doc-title:empty { display: none; }
+#toc {
+  flex: 1 1 0; min-width: 0; max-width: 100%; padding: 6px 30px 6px 12px; font-size: 14px;
+  border: 1px solid var(--line); border-radius: 10px; color: var(--fg); cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background: var(--panel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238a90a0' stroke-width='1.6'/%3E%3C/svg%3E") no-repeat right 11px center / 11px;
+}
+#toc:hover { border-color: var(--mute); }
+.more {
+  display: block; width: 100%; margin: 0 0 1em; padding: 10px 12px; text-align: center;
+  font: 14px ui-rounded, system-ui, sans-serif; color: var(--mute);
+  border: 1px dashed var(--line); border-radius: 12px; background: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.more:last-child { margin: 1em 0 0; }
+.more:hover { color: var(--fg); border-color: var(--mute); }
 
 /* reading */
 .reader { margin-top: 22px; }
@@ -153,7 +173,7 @@ kbd {
 }
 .track { position: relative; height: 14px; margin: 0 -16px; cursor: pointer; }
 .track::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--line); }
-.fill { position: absolute; left: 0; top: 0; height: 3px; width: 0; background: var(--c); transition: width 0.2s linear; }
+.fill { position: absolute; left: 0; top: 0; height: 3px; width: 0; background: var(--c); transition: width 0.2s linear, height 0.15s; }
 .track:hover::before, .track:hover .fill { height: 5px; }
 .row { max-width: 680px; margin: 0 auto; display: flex; align-items: center; gap: 12px; }
 .play {
@@ -174,6 +194,7 @@ kbd {
 .icon svg { width: 18px; height: 18px; fill: currentColor; }
 .stats { flex: 1; text-align: right; font-size: 13px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stats b { color: var(--fg); font-weight: 600; }
+#left { display: inline-block; min-width: 7.5em; margin-left: 0.3em; text-align: left; }   /* fixed width, so the count beside it doesn't shuffle */
 
 .toast {
   position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom)); translate: -50% 0; z-index: 6;
