@@ -146,8 +146,22 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
 
   // ---------- playback ----------
   // How long a chunk stays up. Punctuation pauses stretch it; the speed shown is the pace between pauses.
-  function hold(a) {
-    const b = Math.min(a + state.chunk, words.length);
+  // Where the chunk starting at a ends: after `chunk` words, but never past the end of a paragraph, and in
+  // guide mode never onto the next line, so a highlight doesn't wrap. (layout=false skips the line check,
+  // for estimates over text that isn't on screen.)
+  function chunkEnd(a, layout = true) {
+    const n = words.length;
+    let b = Math.min(a + state.chunk, n);
+    for (let i = a + 1; i < b; i++) if (words[i].p !== words[a].p) { b = i; break; }
+    if (layout && state.mode === 'guide' && a >= win.a && b <= win.b && !$('text').hidden) {
+      const top = sp(a).offsetTop;
+      for (let i = a + 1; i < b; i++) if (sp(i).offsetTop > top + 2) { b = i; break; }
+    }
+    return Math.max(b, Math.min(a + 1, n));
+  }
+
+  function hold(a, layout = true) {
+    const b = chunkEnd(a, layout);
     let ms = (60000 / state.wpm) * (b - a);
     if (state.pauses && b > a) {
       const e = b - 1;
@@ -161,7 +175,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   function remaining(a) {   // ms from the start of chunk a to the end, at the current settings
     if (!state.pauses) return (60000 / state.wpm) * (words.length - a);
     let ms = 0;
-    for (let i = a; i < words.length; i += state.chunk) ms += hold(i);
+    for (let i = a; i < words.length; i = chunkEnd(i, false)) ms += hold(i, false);
     return ms;
   }
 
@@ -200,7 +214,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
 
   function step() {
     if (!playing) return;
-    state.pos = Math.min(state.pos + state.chunk, words.length);
+    state.pos = Math.min(chunkEnd(state.pos), words.length);
     if (state.pos >= words.length) return finish();
     // after a long stall (tab in background, laptop asleep) carry on from now instead of racing to catch up
     if (due < performance.now() - 1000) return restartClock(), paint(true);
@@ -280,7 +294,12 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
 
   function paint(follow) {
     const n = words.length;
-    const a = Math.min(state.pos, n), b = Math.min(a + state.chunk, n);
+    const a = Math.min(state.pos, n);
+    if (state.mode === 'guide' && n && $('editor').hidden) {
+      const at = Math.min(a, n - 1);
+      if (at < win.a || at >= win.b) { renderSection(sectionOf(at)); follow = 'jump'; }
+    }
+    const b = a < n ? chunkEnd(a) : n;
     put(document.body, 'on', playing, (v) => {
       document.body.classList.toggle('on', v);
       $('play').setAttribute('aria-label', v ? 'Pause' : 'Play');
@@ -302,8 +321,6 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     put($('stage'), 'h', editing || state.mode !== 'flash', (v) => { $('stage').hidden = v; });
 
     if (state.mode === 'guide' && n) {
-      const at = Math.min(a, n - 1);
-      if (at < win.a || at >= win.b) { renderSection(sectionOf(at)); follow = 'jump'; }
       if (ranges) {
         mark(ranges.chunk, a, b);
         mark(ranges.read, 0, a);
@@ -371,24 +388,28 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     } else $('ctx').textContent = words.length ? 'Press play to read it again' : 'Nothing to read yet';
   }
 
-  // While playing, the line being read is held at a fixed reading line, like a teleprompter: each time the
-  // highlight moves to a new line the page glides up by that one line, instead of waiting for the bottom and jumping.
-  const READ_AT = 0.4;   // the reading line, as a fraction of the window height
+  // While playing, the highlight drifts down the page as you read. When it passes the lower edge of a reading
+  // band, the page eases up in one longer glide that puts it back near the top, so it moves every few lines
+  // rather than on every line, and never with a jump.
+  const BAND_TOP = 0.28, BAND_BOTTOM = 0.62;   // fractions of the window height
+  const READ_AT = 0.4;   // where a paused or jumped-to highlight is placed
   let glide = null;      // { from, to, t0, ms }
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function glideTo(el) {
     const r = el.getBoundingClientRect();
-    const line = r.height || SIZES[state.size] * 1.7;
-    const target = window.innerHeight * READ_AT;
-    const end = glide ? glide.to : window.scrollY;           // where we're already heading
-    const delta = r.top - target - (end - window.scrollY);   // what's still needed after that
-    if (Math.abs(delta) < line * 0.5) return;                // same line: nothing to do
-    const to = Math.max(0, Math.min(end + delta, document.documentElement.scrollHeight - window.innerHeight));
-    // a one-line glide is gentler than a snap, so it stays on even with reduced motion; only big moves snap
-    if (Math.abs(to - window.scrollY) > window.innerHeight * (reduced() ? 0.2 : 1)) { glide = null; window.scrollTo(0, to); return; }
-    // take about as long as a couple of chunks, so the motion runs into the next one rather than snapping
-    glide = { from: window.scrollY, to, t0: performance.now(), ms: Math.max(350, Math.min(900, hold(state.pos) * 2)) };
+    const h = window.innerHeight;
+    const ahead = glide ? glide.to - window.scrollY : 0;     // scrolling still to come from a glide under way
+    const top = r.top - ahead;                               // where the highlight will be once it lands
+    const bottomEdge = Math.min(h * BAND_BOTTOM, h - 130);   // stay well clear of the bar at the bottom
+    if (top >= h * BAND_TOP - r.height && r.bottom - ahead <= bottomEdge) return;
+    const max = document.documentElement.scrollHeight - h;
+    const to = Math.max(0, Math.min(window.scrollY + ahead + top - h * BAND_TOP, max));
+    const dist = Math.abs(to - window.scrollY);
+    if (dist < 2) return;
+    if (dist > h) { glide = null; window.scrollTo(0, to); return; }   // far off (scrolled away by hand): go straight there
+    // slow and eased, longer for a longer move; on with reduced motion too, as it's gentler than a snap
+    glide = { from: window.scrollY, to, t0: performance.now(), ms: Math.max(600, Math.min(1400, dist * 3.5)) };
     requestAnimationFrame(glideFrame);
   }
 
