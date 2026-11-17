@@ -1,1 +1,102 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="icon" href="/wpm/favicon.ico"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="/wpm/logo192.png"/><link rel="manifest" href="/wpm/manifest.json"/><title>React App</title><link href="/wpm/static/css/main.587edc40.chunk.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div><script>!function(e){function r(r){for(var n,a,i=r[0],c=r[1],l=r[2],f=0,s=[];f<i.length;f++)a=i[f],Object.prototype.hasOwnProperty.call(o,a)&&o[a]&&s.push(o[a][0]),o[a]=0;for(n in c)Object.prototype.hasOwnProperty.call(c,n)&&(e[n]=c[n]);for(p&&p(r);s.length;)s.shift()();return u.push.apply(u,l||[]),t()}function t(){for(var e,r=0;r<u.length;r++){for(var t=u[r],n=!0,i=1;i<t.length;i++){var c=t[i];0!==o[c]&&(n=!1)}n&&(u.splice(r--,1),e=a(a.s=t[0]))}return e}var n={},o={1:0},u=[];function a(r){if(n[r])return n[r].exports;var t=n[r]={i:r,l:!1,exports:{}};return e[r].call(t.exports,t,t.exports,a),t.l=!0,t.exports}a.e=function(e){var r=[],t=o[e];if(0!==t)if(t)r.push(t[2]);else{var n=new Promise((function(r,n){t=o[e]=[r,n]}));r.push(t[2]=n);var u,i=document.createElement("script");i.charset="utf-8",i.timeout=120,a.nc&&i.setAttribute("nonce",a.nc),i.src=function(e){return a.p+"static/js/"+({}[e]||e)+"."+{3:"92b7e4d6"}[e]+".chunk.js"}(e);var c=new Error;u=function(r){i.onerror=i.onload=null,clearTimeout(l);var t=o[e];if(0!==t){if(t){var n=r&&("load"===r.type?"missing":r.type),u=r&&r.target&&r.target.src;c.message="Loading chunk "+e+" failed.\n("+n+": "+u+")",c.name="ChunkLoadError",c.type=n,c.request=u,t[1](c)}o[e]=void 0}};var l=setTimeout((function(){u({type:"timeout",target:i})}),12e4);i.onerror=i.onload=u,document.head.appendChild(i)}return Promise.all(r)},a.m=e,a.c=n,a.d=function(e,r,t){a.o(e,r)||Object.defineProperty(e,r,{enumerable:!0,get:t})},a.r=function(e){"undefined"!=typeof Symbol&&Symbol.toStringTag&&Object.defineProperty(e,Symbol.toStringTag,{value:"Module"}),Object.defineProperty(e,"__esModule",{value:!0})},a.t=function(e,r){if(1&r&&(e=a(e)),8&r)return e;if(4&r&&"object"==typeof e&&e&&e.__esModule)return e;var t=Object.create(null);if(a.r(t),Object.defineProperty(t,"default",{enumerable:!0,value:e}),2&r&&"string"!=typeof e)for(var n in e)a.d(t,n,function(r){return e[r]}.bind(null,n));return t},a.n=function(e){var r=e&&e.__esModule?function(){return e.default}:function(){return e};return a.d(r,"a",r),r},a.o=function(e,r){return Object.prototype.hasOwnProperty.call(e,r)},a.p="/wpm/",a.oe=function(e){throw console.error(e),e};var i=this["webpackJsonpmy-app"]=this["webpackJsonpmy-app"]||[],c=i.push.bind(i);i.push=r,i=i.slice();for(var l=0;l<i.length;l++)r(i[l]);var p=c;t()}([])</script><script src="/wpm/static/js/2.679e2fe8.chunk.js"></script><script src="/wpm/static/js/main.8ccceb4b.chunk.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>WPM Reader</title>
+  <meta name="description" content="Guided reading at the speed you choose.">
+  <meta name="theme-color" content="#0c0d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f6f3" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" id="favicon" href="icon.svg">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+  <script>try { const t = JSON.parse(localStorage.getItem('wpm.v1'))?.theme; if (t && t !== 'auto') document.documentElement.dataset.theme = t; } catch {}</script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="bar">
+        <span class="label">WPM Reader</span>
+        <span class="tools">
+          <span class="seg-ctl" role="radiogroup" aria-label="Reading mode">
+            <button type="button" role="radio" data-mode="guide" title="Highlight words in the text (F)">Guide</button>
+            <button type="button" role="radio" data-mode="flash" title="One chunk at a time, centred (F)">Flash</button>
+          </span>
+          <button type="button" id="theme" class="pill" title="Theme">Auto</button>
+          <button type="button" id="install" class="pill" hidden>Install</button>
+        </span>
+      </div>
+
+      <div class="summary">
+        <div class="speed"><span id="wpm" class="big">250</span><span class="unit">wpm</span></div>
+        <div class="steppers">
+          <div class="stepper" title="Words per step (↑ ↓)">
+            <span class="k">Chunk</span>
+            <button type="button" data-step="chunk" data-d="-1" aria-label="Fewer words per step">−</button>
+            <output id="chunk">1</output>
+            <button type="button" data-step="chunk" data-d="1" aria-label="More words per step">+</button>
+          </div>
+          <div class="stepper" title="Text size (, .)">
+            <span class="k">Size</span>
+            <button type="button" data-step="size" data-d="-1" aria-label="Smaller text">−</button>
+            <output id="size">22</output>
+            <button type="button" data-step="size" data-d="1" aria-label="Larger text">+</button>
+          </div>
+        </div>
+      </div>
+      <input id="speed" type="range" min="50" max="1000" step="10" value="250" aria-label="Words per minute">
+      <div class="opts">
+        <label class="switch" title="Linger a little on commas, full stops and paragraph ends">
+          <input type="checkbox" id="pauses"> Pause at punctuation
+        </label>
+        <span id="meta" class="meta"></span>
+        <button type="button" id="edit" class="pill" title="Edit text (E)">Edit text</button>
+      </div>
+    </header>
+
+    <section id="reader" class="reader">
+      <div id="text" class="text" aria-live="off"></div>
+      <div id="stage" class="stage" hidden>
+        <div class="flash" aria-live="off"><span id="fl"></span><b id="fp"></b><span id="fr"></span></div>
+        <div id="ctx" class="ctx"></div>
+      </div>
+      <div id="editor" class="editor" hidden>
+        <textarea id="src" spellcheck="false" placeholder="Paste or type something to read. You can also drop a .txt file anywhere on the page."></textarea>
+        <div class="editor-bar">
+          <span id="srcMeta" class="meta"></span>
+          <span class="editor-actions">
+            <button type="button" id="clear" class="pill">Clear</button>
+            <button type="button" id="done" class="pill strong">Read <kbd>Esc</kbd></button>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <p class="hint">
+      <kbd>Space</kbd> play <kbd>←</kbd><kbd>→</kbd> speed <kbd>↑</kbd><kbd>↓</kbd> chunk
+      <kbd>[</kbd><kbd>]</kbd> sentence <kbd>R</kbd> restart <kbd>F</kbd> mode <kbd>E</kbd> edit
+    </p>
+  </main>
+
+  <footer class="transport">
+    <div id="track" class="track" title="Jump to a point"><div id="fill" class="fill"></div></div>
+    <div class="row">
+      <button type="button" id="restart" class="icon" title="Restart (R)" aria-label="Restart">
+        <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8z"/></svg>
+      </button>
+      <button type="button" id="play" class="play" title="Play / pause (Space)" aria-label="Play">
+        <svg class="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>
+        <svg class="i-pause" viewBox="0 0 24 24"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>
+      </button>
+      <span id="stats" class="stats"></span>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast" hidden><span id="toastText"></span></div>
+  <div id="drop" class="drop" hidden>Drop a text file to read it</div>
+  <script src="app.js"></script>
+</body>
+</html>
