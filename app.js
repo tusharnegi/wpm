@@ -303,7 +303,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
 
     if (state.mode === 'guide' && n) {
       const at = Math.min(a, n - 1);
-      if (at < win.a || at >= win.b) { renderSection(sectionOf(at)); follow = true; }
+      if (at < win.a || at >= win.b) { renderSection(sectionOf(at)); follow = 'jump'; }
       if (ranges) {
         mark(ranges.chunk, a, b);
         mark(ranges.read, 0, a);
@@ -316,7 +316,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
         if (a < shown.a) for (let i = Math.max(a, win.a); i < Math.min(shown.a, win.b); i++) sp(i).classList.remove('read');
         shown = { a, b };
       }
-      if (follow && b > a && sp(a)) keepInView(sp(a));
+      if (follow && b > a && sp(a)) (playing && follow !== 'jump' ? glideTo(sp(a)) : keepInView(sp(a), follow === 'jump'));
     } else if (state.mode === 'flash') {
       paintFlash(a, b);
     }
@@ -371,12 +371,46 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     } else $('ctx').textContent = words.length ? 'Press play to read it again' : 'Nothing to read yet';
   }
 
-  function keepInView(el) {
+  // While playing, the line being read is held at a fixed reading line, like a teleprompter: each time the
+  // highlight moves to a new line the page glides up by that one line, instead of waiting for the bottom and jumping.
+  const READ_AT = 0.4;   // the reading line, as a fraction of the window height
+  let glide = null;      // { from, to, t0, ms }
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function glideTo(el) {
     const r = el.getBoundingClientRect();
-    const top = window.innerHeight * 0.22, bottom = window.innerHeight - 110 - window.innerHeight * 0.18;
-    if (r.top >= top && r.bottom <= bottom) return;
-    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    window.scrollTo({ top: window.scrollY + r.top - window.innerHeight * 0.35, behavior: smooth ? 'smooth' : 'auto' });
+    const line = r.height || SIZES[state.size] * 1.7;
+    const target = window.innerHeight * READ_AT;
+    const end = glide ? glide.to : window.scrollY;           // where we're already heading
+    const delta = r.top - target - (end - window.scrollY);   // what's still needed after that
+    if (Math.abs(delta) < line * 0.5) return;                // same line: nothing to do
+    const to = Math.max(0, Math.min(end + delta, document.documentElement.scrollHeight - window.innerHeight));
+    // a one-line glide is gentler than a snap, so it stays on even with reduced motion; only big moves snap
+    if (Math.abs(to - window.scrollY) > window.innerHeight * (reduced() ? 0.2 : 1)) { glide = null; window.scrollTo(0, to); return; }
+    // take about as long as a couple of chunks, so the motion runs into the next one rather than snapping
+    glide = { from: window.scrollY, to, t0: performance.now(), ms: Math.max(350, Math.min(900, hold(state.pos) * 2)) };
+    requestAnimationFrame(glideFrame);
+  }
+
+  function glideFrame(now) {
+    if (!glide) return;
+    const k = Math.min(1, (now - glide.t0) / glide.ms);
+    const ease = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;   // ease in and out
+    window.scrollTo(0, glide.from + (glide.to - glide.from) * ease);
+    if (k < 1) requestAnimationFrame(glideFrame); else glide = null;
+  }
+  // scrolling by hand takes over until the next line change
+  for (const ev of ['wheel', 'touchstart', 'keydown']) {
+    window.addEventListener(ev, (e) => { if (ev !== 'keydown' || /^(Page|Home|End)/.test(e.key)) glide = null; }, { passive: true });
+  }
+
+  // When paused, or after a jump, just make sure the highlight is on screen.
+  function keepInView(el, instant) {
+    glide = null;
+    const r = el.getBoundingClientRect();
+    const top = window.innerHeight * 0.15, bottom = window.innerHeight - 110 - window.innerHeight * 0.1;
+    if (!instant && r.top >= top && r.bottom <= bottom) return;
+    window.scrollTo({ top: window.scrollY + r.top - window.innerHeight * READ_AT, behavior: instant || reduced() ? 'auto' : 'smooth' });
   }
 
   function paintIcon(on, pct) {   // the tab icon fills up as you read
