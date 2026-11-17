@@ -1,6 +1,6 @@
 // Network first, so a deploy shows up on the next load; the cache only serves when offline.
-const CACHE = 'wpm-v1';
-const SHELL = ['./', 'style.css', 'app.js', 'manifest.json', 'icon.svg'];
+const CACHE = 'wpm-v2';
+const SHELL = ['./', 'style.css', 'app.js', 'formats.js', 'manifest.json', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

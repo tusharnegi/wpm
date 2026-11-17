@@ -1,39 +1,62 @@
 (() => {
   'use strict';
 
-  const KEY = 'wpm.v1';
+  const KEY = 'wpm.v1';       // settings and position (small; written often)
+  const DOC = 'wpm.doc';      // { text, title, chapters } (large; written only when the text changes)
   const SIZES = [14, 16, 18, 20, 22, 25, 28, 32, 36, 42, 48];
   const THEMES = ['auto', 'light', 'dark'];
+  const SECTION = 4000;       // guide mode shows one chapter, or about this many words, at a time
   const SAMPLE = `Welcome to WPM Reader. Paste anything you want to read, pick a speed, and press play. The highlight moves through the text at exactly that pace, so your eyes have somewhere to be and stop drifting back over lines you have already read.
 
 Guide mode keeps the whole page in view and walks a highlight across it. Flash mode shows one chunk at a time in the centre of the screen, with a single letter marked to rest your eyes on, which is the fastest way to read once you are used to it.
 
-Raise the chunk size to take in two or three words at once. Turn on pausing at punctuation to linger a little at commas and full stops. Click any word, or the progress bar at the bottom, to jump there. Your text, your place in it and your settings are saved on this device, so you can close the page and pick up where you left off.`;
+Raise the chunk size to take in two or three words at once. Turn on pausing at punctuation to linger a little at commas and full stops. Click any word, or the progress bar at the bottom, to jump there. Open an EPUB or PDF to read a whole book, a chapter at a time. Your text, your place in it and your settings are saved on this device, so you can close the page and pick up where you left off.`;
   const $ = (id) => document.getElementById(id);
 
   // ---------- state ----------
-  // { text, pos, wpm, chunk, size, mode, pauses, theme } — pos is the index of the first highlighted word.
+  // state: { pos, wpm, chunk, size, mode, pauses, theme } — pos is the index of the first highlighted word.
   let state = load();
+  let doc = loadDoc();
   let words = [];        // [{ w, p }] — the word and the index of its paragraph
-  let spans = [];        // the word elements in guide mode
+  let bounds = [0];      // first word of each section shown in guide mode
+  let win = { a: 0, b: 0 };   // the words currently rendered in guide mode
+  let spans = [];        // their elements; word i is spans[i - win.a]
   let playing = false;
   let timer = 0;
-  let due = 0;           // when the current chunk ends
-  let shown = { a: 0, b: 0 };   // highlighted range [a, b) in the text, to update only what changed
+  let due = 0;           // when the current chunk ends (performance.now() time)
+  let endAt = 0;         // when the whole text ends at this pace, for a countdown that ticks evenly
+  let shown = { a: 0, b: 0 };   // highlighted range in older browsers, to update only what changed
   let started = null;    // { at, pos } of the current run, for the "finished" summary
   let lock = null;
   let toastTimer = 0;
   let iconKey = '';
 
   function load() {
-    const d = { text: SAMPLE, pos: 0, wpm: 250, chunk: 1, size: 4, mode: 'guide', pauses: false, theme: 'auto' };
+    const d = { pos: 0, wpm: 250, chunk: 1, size: 4, mode: 'guide', pauses: false, theme: 'auto' };
     try { return { ...d, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return d; }
   }
+  function loadDoc() {
+    try {
+      const d = JSON.parse(localStorage.getItem(DOC));
+      if (d && typeof d.text === 'string') return { title: '', chapters: [], ...d };
+    } catch {}
+    // earlier versions kept the text in the settings
+    const text = typeof state.text === 'string' ? state.text : SAMPLE;
+    delete state.text;
+    return { text, title: '', chapters: [] };
+  }
+
   let saveTimer = 0;
-  function save(soon) {
-    clearTimeout(saveTimer);
-    const write = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} };
-    soon ? (saveTimer = setTimeout(write, 400)) : write();
+  function save(soon) {   // soon: at most once a second, for things that change on every step
+    if (soon) { saveTimer ||= setTimeout(save, 1000); return; }
+    clearTimeout(saveTimer); saveTimer = 0;
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  }
+  function saveDoc() {
+    try { localStorage.setItem(DOC, JSON.stringify(doc)); return true; } catch {
+      localStorage.removeItem(DOC);
+      return false;
+    }
   }
 
   // ---------- text ----------
@@ -45,22 +68,72 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   }
 
   function buildText() {
-    words = parse(state.text);
+    words = parse(doc.text);
+    // sections: each chapter, with long stretches split at a paragraph break
+    const starts = new Set(doc.chapters.map((c) => c.i));
+    bounds = [0];
+    for (let i = 1; i < words.length; i++) {
+      if (starts.has(i) || (i - bounds[bounds.length - 1] >= SECTION && words[i].p !== words[i - 1].p)) bounds.push(i);
+    }
+    win = { a: 0, b: 0 };
     spans = [];
+    $('text').textContent = '';
+    if (!words.length) $('text').innerHTML = '<p class="meta">Nothing to read yet. Press <kbd>E</kbd> or “Edit text” to paste something, or open a file.</p>';
+    state.pos = Math.min(state.pos, words.length);
+    buildToc();
+  }
+
+  function sectionOf(i) {
+    let lo = 0, hi = bounds.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; bounds[m] <= i ? (lo = m) : (hi = m - 1); }
+    return { a: bounds[lo], b: bounds[lo + 1] ?? words.length };
+  }
+
+  function chapterAt(i) {   // index into doc.chapters, or -1
+    let k = -1;
+    for (let j = 0; j < doc.chapters.length && doc.chapters[j].i <= i; j++) k = j;
+    return k;
+  }
+
+  function renderSection(s) {
+    win = s;
+    spans = [];
+    shown = { a: s.a, b: s.a };
+    if (ranges) for (const k in ranges) ranges[k].collapse(true);
     const box = $('text');
     box.textContent = '';
+    const nav = (label, to) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'more'; b.dataset.seek = to; b.textContent = label;
+      box.append(b);
+    };
+    if (s.a > 0) {
+      const prev = sectionOf(s.a - 1).a, k = chapterAt(prev);
+      nav(`↑ ${k >= 0 && doc.chapters[k].i === prev ? doc.chapters[k].t : 'Previous part'}`, prev);
+    }
     let para = null, last = -1;
-    words.forEach(({ w, p }, i) => {
+    for (let i = s.a; i < s.b; i++) {
+      const { w, p } = words[i];
       if (p !== last) { para = document.createElement('p'); box.append(para); last = p; }
       else para.append(' ');
-      const s = document.createElement('span');
-      s.className = 'w'; s.dataset.i = i; s.textContent = w;
-      para.append(s); spans.push(s);
-    });
-    if (!words.length) box.innerHTML = '<p class="meta">Nothing to read yet. Press <kbd>E</kbd> or “Edit text” to paste something.</p>';
-    shown = { a: 0, b: 0 };
-    if (ranges) for (const k in ranges) ranges[k].collapse(true);   // they pointed into the old text
-    state.pos = Math.min(state.pos, words.length);
+      const el = document.createElement('span');
+      el.className = 'w'; el.dataset.i = i; el.textContent = w;
+      para.append(el); spans.push(el);
+    }
+    if (s.b < words.length) {
+      const k = chapterAt(s.b);
+      nav(`${k >= 0 && doc.chapters[k].i === s.b ? doc.chapters[k].t : 'Next part'} ↓`, s.b);
+    }
+  }
+
+  function buildToc() {
+    const sel = $('toc');
+    sel.textContent = '';
+    for (const [k, c] of doc.chapters.entries()) sel.add(new Option(c.t, k));
+    $('docbar').hidden = !doc.chapters.length && !doc.title;
+    sel.hidden = !doc.chapters.length;
+    $('docTitle').textContent = doc.title;
+    last.delete('tocv');
   }
 
   const endsSentence = (i) => /[.!?…]["'”’)\]]*$/.test(words[i].w) || words[i + 1]?.p !== words[i].p;
@@ -85,13 +158,27 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     return ms;
   }
 
+  function remaining(a) {   // ms from the start of chunk a to the end, at the current settings
+    if (!state.pauses) return (60000 / state.wpm) * (words.length - a);
+    let ms = 0;
+    for (let i = a; i < words.length; i += state.chunk) ms += hold(i);
+    return ms;
+  }
+
+  // (re)start timing the chunk at pos from now
+  function restartClock() {
+    started = { at: Date.now(), pos: state.pos };
+    const now = performance.now();
+    due = now + hold(state.pos);
+    endAt = now + remaining(state.pos);
+    schedule();
+  }
+
   function play() {
     if (!words.length) return openEditor();
     if (state.pos >= words.length) state.pos = 0;
     playing = true;
-    started = { at: Date.now(), pos: state.pos };
-    due = performance.now() + hold(state.pos);
-    schedule();
+    restartClock();
     wake(true);
     paint(true);
   }
@@ -115,9 +202,9 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     if (!playing) return;
     state.pos = Math.min(state.pos + state.chunk, words.length);
     if (state.pos >= words.length) return finish();
-    due += hold(state.pos);
     // after a long stall (tab in background, laptop asleep) carry on from now instead of racing to catch up
-    if (due < performance.now() - 1000) due = performance.now() + hold(state.pos);
+    if (due < performance.now() - 1000) return restartClock(), paint(true);
+    due += hold(state.pos);
     schedule();
     paint(true);
     save(true);
@@ -135,9 +222,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     state.pos = Math.max(0, Math.min(i, words.length));
     if (playing) {
       if (state.pos >= words.length) return finish();
-      started = { at: Date.now(), pos: state.pos };
-      due = performance.now() + hold(state.pos);
-      schedule();
+      restartClock();
     }
     save(true);
     paint(follow);
@@ -145,13 +230,14 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
 
   function setSpeed(v) {
     state.wpm = Math.max(50, Math.min(1000, Math.round(v)));
-    if (playing) { due = performance.now() + hold(state.pos); schedule(); started = { at: Date.now(), pos: state.pos }; }
+    if (playing) restartClock();
     save(true);
     paint();
   }
 
   function setChunk(v) {
     state.chunk = Math.max(1, Math.min(10, v));
+    if (playing) restartClock();
     save(true);
     paint();
   }
@@ -184,10 +270,12 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   // moving them changes no elements at all, and the chunk is one joined highlight across its spaces.
   const ranges = 'highlights' in CSS ? { chunk: new Range(), read: new Range() } : null;
   if (ranges) for (const k in ranges) CSS.highlights.set(k, new Highlight(ranges[k]));
-  function mark(range, from, to) {   // cover words [from, to)
+  const sp = (i) => spans[i - win.a];
+  function mark(range, from, to) {   // cover words [from, to), clipped to what's rendered
+    from = Math.max(from, win.a); to = Math.min(to, win.b);
     if (to <= from) return range.collapse(true);
-    range.setStart(spans[from].firstChild, 0);
-    range.setEnd(spans[to - 1].firstChild, spans[to - 1].firstChild.length);
+    range.setStart(sp(from).firstChild, 0);
+    range.setEnd(sp(to - 1).firstChild, sp(to - 1).firstChild.length);
   }
 
   function paint(follow) {
@@ -213,37 +301,51 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     put($('text'), 'h', editing || state.mode !== 'guide', (v) => { $('text').hidden = v; });
     put($('stage'), 'h', editing || state.mode !== 'flash', (v) => { $('stage').hidden = v; });
 
-    if (state.mode === 'guide' && spans.length) {
+    if (state.mode === 'guide' && n) {
+      const at = Math.min(a, n - 1);
+      if (at < win.a || at >= win.b) { renderSection(sectionOf(at)); follow = true; }
       if (ranges) {
         mark(ranges.chunk, a, b);
         mark(ranges.read, 0, a);
       } else {   // older browsers: toggle classes on just the words whose state changed
-        const lo = Math.min(shown.a, a), hi = Math.max(shown.b, b, shown.a, a);
-        for (let i = lo; i < hi && i < spans.length; i++) {
-          spans[i].classList.toggle('hl', i >= a && i < b);
-          spans[i].classList.toggle('read', i < a);
+        const lo = Math.max(win.a, Math.min(shown.a, a)), hi = Math.min(win.b, Math.max(shown.b, b, shown.a, a));
+        for (let i = lo; i < hi; i++) {
+          sp(i).classList.toggle('hl', i >= a && i < b);
+          sp(i).classList.toggle('read', i < a);
         }
-        if (a < shown.a) for (let i = a; i < shown.a; i++) spans[i].classList.remove('read');
+        if (a < shown.a) for (let i = Math.max(a, win.a); i < Math.min(shown.a, win.b); i++) sp(i).classList.remove('read');
         shown = { a, b };
       }
-      if (follow && b > a) keepInView(spans[a]);
+      if (follow && b > a && sp(a)) keepInView(sp(a));
     } else if (state.mode === 'flash') {
       paintFlash(a, b);
     }
 
-    // progress
+    if (doc.chapters.length) put($('toc'), 'v', chapterAt(a), (k) => { $('toc').value = Math.max(0, k); });
+
+    // progress: while playing the bar glides to the end of the current chunk over exactly as long as it's shown
     const pct = n ? (a / n) * 100 : 0;
-    put($('fill'), 'w', pct, (v) => { $('fill').style.width = v + '%'; });
-    const stats = n
-      ? (a >= n ? `<b>Done</b> · ${n.toLocaleString()} words` :
-        `<b>${Math.floor(pct)}%</b> · ${a.toLocaleString()} / ${n.toLocaleString()} · ${clock(((n - a) / state.wpm) * 60)} left`)
-      : 'No text';
-    put($('stats'), 'html', stats, (v) => { $('stats').innerHTML = v; });
+    const glide = playing ? { to: (b / n) * 100, ms: Math.max(0, due - performance.now()) } : { to: pct, ms: 200 };
+    put($('fill'), 'w', glide.to, () => {
+      $('fill').style.transitionDuration = glide.ms.toFixed(0) + 'ms';
+      $('fill').style.width = glide.to + '%';
+    });
+    text($('stats'), n ? (a >= n ? `Done · ${n.toLocaleString()} words` : `${Math.floor(pct)}% · ${a.toLocaleString()} / ${n.toLocaleString()}`) : 'No text');
+    tickLeft();
     text($('meta'), n ? `${n.toLocaleString()} words · ${clock((n / state.wpm) * 60)} at this speed` : '');
-    const title = playing ? `${Math.floor(pct)}% · WPM Reader` : 'WPM Reader';
+    const title = playing ? `${Math.floor(pct)}% · ${doc.title || 'WPM Reader'}` : (doc.title ? `${doc.title} · WPM Reader` : 'WPM Reader');
     if (document.title !== title) document.title = title;
     paintIcon(playing, pct);
   }
+
+  // Time left counts down once a second against a fixed finish time, rather than jumping with each chunk.
+  function tickLeft() {
+    const n = words.length;
+    if (!n || state.pos >= n) return text($('left'), '');
+    const ms = playing ? endAt - performance.now() : remaining(state.pos);
+    text($('left'), ` · ${clock(Math.ceil(Math.max(0, ms) / 1000))} left`);
+  }
+  setInterval(() => { if (playing) tickLeft(); }, 200);
 
   function paintFlash(a, b) {
     const chunk = words.slice(a, b).map((x) => x.w).join(' ');
@@ -301,17 +403,17 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  function toast(msg) {
+  function toast(msg, stay) {
     clearTimeout(toastTimer);
     $('toastText').textContent = msg;
     $('toast').hidden = false;
-    toastTimer = setTimeout(() => { $('toast').hidden = true; }, 5000);
+    if (!stay) toastTimer = setTimeout(() => { $('toast').hidden = true; }, 5000);
   }
 
-  // ---------- editing ----------
+  // ---------- editing and files ----------
   function openEditor() {
     if (playing) pause();
-    $('src').value = state.text;
+    $('src').value = doc.text;
     $('editor').hidden = false;
     paint();
     srcMeta();
@@ -322,19 +424,21 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     if ($('editor').hidden) return;
     const v = $('src').value;
     $('editor').hidden = true;
-    if (v !== state.text) setText(v);
+    if (v !== doc.text) setDoc({ text: v, title: '', chapters: [] });   // edited text no longer matches the chapters
     else paint(true);
   }
 
-  function setText(text, msg) {
+  function setDoc(d, msg) {
     if (playing) pause();
-    state.text = text;
+    doc = { title: '', chapters: [], ...d };
     state.pos = 0;
     buildText();
+    const kept = saveDoc();
     save();
     window.scrollTo({ top: 0 });
     paint();
-    if (msg) toast(msg);
+    if (!kept) toast('This is too long to keep on this device, so it won’t be here after you close the page.');
+    else if (msg) toast(msg);
   }
 
   function srcMeta() {
@@ -342,16 +446,42 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     $('srcMeta').textContent = n ? `${n.toLocaleString()} words · ${clock((n / state.wpm) * 60)} at ${state.wpm} wpm` : '';
   }
 
+  async function openFile(f) {
+    if (!f) return;
+    $('editor').hidden = true;
+    const kind = /\.epub$/i.test(f.name) || f.type === 'application/epub+zip' ? 'epub'
+      : /\.pdf$/i.test(f.name) || f.type === 'application/pdf' ? 'pdf'
+      : /^text\/|json|xml|markdown/.test(f.type) || /\.(txt|md|markdown|text|csv|html?)$/i.test(f.name) ? 'text' : null;
+    if (!kind) return toast('Open a text, EPUB or PDF file');
+    if (playing) pause();
+    try {
+      if (kind === 'text') {
+        let t = await f.text();
+        if (/\.html?$/i.test(f.name) || f.type === 'text/html') t = new DOMParser().parseFromString(t, 'text/html').body.innerText;
+        return setDoc({ text: t, title: f.name.replace(/\.[^.]+$/, '') }, `Opened ${f.name}`);
+      }
+      toast(`Opening ${f.name}…`, true);
+      const d = await window.WPMFormats[kind](f, (m) => toast(m, true));
+      const n = parse(d.text).length;
+      setDoc(d, `Opened ${d.title} · ${n.toLocaleString()} words${d.chapters.length ? ` · ${d.chapters.length} chapters` : ''}`);
+    } catch (err) {
+      toast(err?.message || `Couldn’t open ${f.name}`);
+    }
+  }
+
   // ---------- wiring ----------
   $('play').addEventListener('click', toggle);
   $('restart').addEventListener('click', () => seek(0));
   $('speed').addEventListener('input', (ev) => setSpeed(Number(ev.target.value)));
-  $('pauses').addEventListener('change', (ev) => { state.pauses = ev.target.checked; save(); paint(); });
+  $('pauses').addEventListener('change', (ev) => { state.pauses = ev.target.checked; if (playing) restartClock(); save(); paint(); });
   $('edit').addEventListener('click', openEditor);
+  $('open').addEventListener('click', () => $('file').click());
+  $('file').addEventListener('change', (ev) => { openFile(ev.target.files[0]); ev.target.value = ''; });
   $('done').addEventListener('click', closeEditor);
   $('clear').addEventListener('click', () => { $('src').value = ''; srcMeta(); $('src').focus(); });
   $('src').addEventListener('input', srcMeta);
   $('stage').addEventListener('click', toggle);
+  $('toc').addEventListener('change', (ev) => { seek(doc.chapters[ev.target.value].i); ev.target.blur(); });
 
   for (const b of document.querySelectorAll('[data-step]')) {
     b.addEventListener('click', () => {
@@ -364,7 +494,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   }
   function setMode(m) {
     state.mode = m;
-    shown = { a: 0, b: words.length };   // repaint every word when coming back to the text
+    shown = { a: win.a, b: win.b };   // repaint every rendered word when coming back to the text
     save();
     paint(true);
   }
@@ -376,6 +506,8 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   });
 
   $('text').addEventListener('click', (ev) => {
+    const more = ev.target.closest('[data-seek]');
+    if (more) { seek(Number(more.dataset.seek)); window.scrollTo({ top: $('text').offsetTop - 16 }); return; }
     const w = ev.target.closest('.w');
     if (w && !getSelection().toString()) seek(Number(w.dataset.i), false);
   });
@@ -397,11 +529,12 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
   document.addEventListener('click', (ev) => { if (ev.detail > 0) ev.target.closest('button')?.blur(); });
 
   document.addEventListener('keydown', (ev) => {
-    const t = ev.target;
+    const t = ev.target instanceof Element ? ev.target : document.body;
     if (t.matches('textarea')) {
       if (ev.key === 'Escape' || (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey))) { ev.preventDefault(); closeEditor(); }
       return;
     }
+    if (t.matches('select')) return;
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
     if (t.matches('button') && (ev.key === ' ' || ev.key === 'Enter')) return;
     const k = ev.key;
@@ -417,6 +550,7 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
       r: () => seek(0),
       f: () => setMode(state.mode === 'guide' ? 'flash' : 'guide'),
       e: openEditor,
+      o: () => $('file').click(),
       ',': () => setSize(state.size - 1), '<': () => setSize(state.size - 1),
       '.': () => setSize(state.size + 1), '>': () => setSize(state.size + 1),
     }[k.length === 1 ? k.toLowerCase() : k];
@@ -425,21 +559,17 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
     act();
   });
 
-  // drop a text file anywhere
+  // drop a file anywhere
   let dragDepth = 0;
   const hasFile = (ev) => [...(ev.dataTransfer?.types || [])].includes('Files');
   document.addEventListener('dragenter', (ev) => { if (hasFile(ev)) { dragDepth++; $('drop').hidden = false; } });
   document.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
   document.addEventListener('dragover', (ev) => { if (hasFile(ev)) ev.preventDefault(); });
-  document.addEventListener('drop', async (ev) => {
+  document.addEventListener('drop', (ev) => {
     if (!hasFile(ev)) return;
     ev.preventDefault();
     dragDepth = 0; $('drop').hidden = true;
-    const f = ev.dataTransfer.files[0];
-    if (!f) return;
-    if (!/^text\/|json|xml|markdown/.test(f.type) && !/\.(txt|md|markdown|text|csv|html?)$/i.test(f.name)) return toast('That doesn’t look like a text file');
-    $('editor').hidden = true;
-    setText(await f.text(), `Loaded ${f.name}`);
+    openFile(ev.dataTransfer.files[0]);
   });
 
   let installEvent = null;
@@ -453,22 +583,21 @@ Raise the chunk size to take in two or three words at once. Turn on pausing at p
 
   // another tab changed the text or settings
   window.addEventListener('storage', (ev) => {
-    if (ev.key !== KEY || playing) return;
-    const textBefore = state.text;
+    if ((ev.key !== KEY && ev.key !== DOC) || playing) return;
     state = load();
-    if (state.text !== textBefore) buildText();
+    if (ev.key === DOC) { doc = loadDoc(); buildText(); }
     paint();
   });
 
   // Shared to the installed app, or opened as ?text=…: read that.
   const q = new URLSearchParams(location.search);
-  const shared = [q.get('title'), q.get('text'), q.get('url')].filter(Boolean).join('\n\n');
-  if (shared) state.text = shared, state.pos = 0;
+  const shared = [q.get('text'), q.get('url')].filter(Boolean).join('\n\n');
   if (location.search) history.replaceState(null, '', location.pathname);
 
+  if (shared) { doc = { text: shared, title: q.get('title') || '', chapters: [] }; state.pos = 0; saveDoc(); save(); }
+  else if (!localStorage.getItem(DOC)) { saveDoc(); save(); }   // move text saved by an earlier version
   buildText();
   if (state.theme !== 'auto') document.documentElement.dataset.theme = state.theme;
-  if (shared) save();
   paint(state.pos > 0);   // reopen where you left off
 
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
